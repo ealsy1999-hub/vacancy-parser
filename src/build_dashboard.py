@@ -1,9 +1,4 @@
-"""
-День 4: генерация HTML-дашборда из данных SQLite.
-"""
-
-import sqlite3
-import json
+import sqlite3, json
 import pandas as pd
 
 DB_PATH = "data/vacancies.db"
@@ -13,25 +8,18 @@ conn = sqlite3.connect(DB_PATH)
 df = pd.read_sql_query("SELECT * FROM vacancies", conn)
 conn.close()
 
-# === Подготовка данных ===
+def short(s):
+    return s.replace("автономный округ","АО").replace("Республика","Респ.").replace("область","обл.").replace("край","кр.").replace("Город ","")
 
-# Топ-10 регионов по вакансиям
 top_regions = df["region"].value_counts().head(10)
-regions_labels = top_regions.index.tolist()
+regions_labels = [short(r) for r in top_regions.index.tolist()]
 regions_values = top_regions.values.tolist()
 
-# Топ-10 регионов по средней зарплате
 df_salary = df[df["salary_min"] > 0]
-salary_by_region = (
-    df_salary.groupby("region")["salary_min"]
-    .mean().astype(int)
-    .sort_values(ascending=False)
-    .head(10)
-)
-salary_labels = salary_by_region.index.tolist()
+salary_by_region = df_salary.groupby("region")["salary_min"].mean().astype(int).sort_values(ascending=False).head(10)
+salary_labels = [short(r) for r in salary_by_region.index.tolist()]
 salary_values = salary_by_region.values.tolist()
 
-# Топ-15 навыков
 all_skills = []
 for s in df["skills"].dropna():
     if s.strip():
@@ -39,172 +27,151 @@ for s in df["skills"].dropna():
             skill = skill.strip()
             if skill and len(skill) > 3:
                 all_skills.append(skill)
-skills_series = pd.Series(all_skills).value_counts().head(15)
+skills_series = pd.Series(all_skills).value_counts().head(12)
 skills_labels = skills_series.index.tolist()
 skills_values = skills_series.values.tolist()
 
-# Нефтянка vs Финансы
-oil_queries = ["оператор добычи нефти и газа", "инженер нефтегазового оборудования",
-               "буровой мастер", "геолог нефтегазовой", "технолог нефтепереработки",
-               "инженер по бурению"]
-fin_queries = ["финансовый аналитик", "бухгалтер", "экономист", "кредитный специалист банка"]
+oil_queries = ["оператор добычи нефти и газа","инженер нефтегазового оборудования","буровой мастер","геолог нефтегазовой","технолог нефтепереработки","инженер по бурению"]
+fin_queries = ["финансовый аналитик","бухгалтер","экономист","кредитный специалист банка"]
 oil_avg = int(df[df["search_query"].isin(oil_queries) & (df["salary_min"] > 0)]["salary_min"].mean())
 fin_avg = int(df[df["search_query"].isin(fin_queries) & (df["salary_min"] > 0)]["salary_min"].mean())
-
-# Опыт
-exp_series = pd.to_numeric(df["experience"], errors="coerce").dropna().astype(int).value_counts().sort_index()
-exp_labels = [f"{x} лет" if x > 0 else "Без опыта" for x in exp_series.index.tolist()]
-exp_values = exp_series.values.tolist()
-
-# Топ-10 компаний
-top_companies = df["company"].value_counts().head(10)
-companies_labels = top_companies.index.tolist()
-companies_values = top_companies.values.tolist()
-
-total = len(df)
 oil_count = len(df[df["search_query"].isin(oil_queries)])
 fin_count = len(df[df["search_query"].isin(fin_queries)])
+total = len(df)
 
-# === HTML ===
-html = f"""<!DOCTYPE html>
+exp_series = pd.to_numeric(df["experience"], errors="coerce").dropna().astype(int).value_counts().sort_index()
+exp_labels = ["Без опыта" if x == 0 else f"{x} лет" for x in exp_series.index.tolist()]
+exp_values = exp_series.values.tolist()
+
+top_companies = df["company"].value_counts().head(8)
+comp_labels = top_companies.index.tolist()
+comp_values = top_companies.values.tolist()
+
+HTML = f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Анализ рынка труда — Нефтянка & Финансы</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Рынок труда — Нефтянка & Финансы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }}
-  .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 40px; text-align: center; border-bottom: 1px solid #2a2a4a; }}
-  .header h1 {{ font-size: 28px; color: #fff; margin-bottom: 8px; }}
-  .header p {{ color: #888; font-size: 14px; }}
-  .stats {{ display: flex; gap: 20px; padding: 30px 40px; justify-content: center; flex-wrap: wrap; }}
-  .stat-card {{ background: #1e1e2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px 32px; text-align: center; min-width: 160px; }}
-  .stat-card .num {{ font-size: 32px; font-weight: 700; color: #7c7cff; }}
-  .stat-card .label {{ font-size: 13px; color: #888; margin-top: 4px; }}
-  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 0 40px 40px; max-width: 1400px; margin: 0 auto; }}
-  .card {{ background: #1e1e2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px; }}
-  .card h2 {{ font-size: 15px; color: #aaa; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }}
-  .full-width {{ grid-column: 1 / -1; }}
-  canvas {{ max-height: 320px; }}
-  @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr; padding: 0 16px 24px; }} .stats {{ padding: 20px 16px; }} }}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Inter',sans-serif;background:#08080e;color:#d4d4d8;min-height:100vh;-webkit-font-smoothing:antialiased}}
+.page{{max-width:1200px;margin:0 auto;padding:48px 28px}}
+.header{{margin-bottom:40px;padding-bottom:28px;border-bottom:0.5px solid #1c1c28}}
+.header h1{{font-size:20px;font-weight:600;color:#fafafa;letter-spacing:-0.3px;margin-bottom:5px}}
+.header p{{font-size:12px;color:#52525b;letter-spacing:0.02em}}
+.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin-bottom:36px}}
+.m{{background:#0e0e18;border:0.5px solid #1e1e2d;border-radius:10px;padding:20px;position:relative;overflow:hidden}}
+.m::before{{content:'';position:absolute;top:0;left:0;right:0;height:2px}}
+.m.v1::before{{background:linear-gradient(90deg,#534AB7,#7c7cff)}}
+.m.v2::before{{background:linear-gradient(90deg,#1D9E75,#4ecda4)}}
+.m.v3::before{{background:linear-gradient(90deg,#378ADD,#5ba8f5)}}
+.m.v4::before{{background:linear-gradient(90deg,#9333ea,#c084fc)}}
+.m.v5::before{{background:linear-gradient(90deg,#D85A30,#f97316)}}
+.m-label{{font-size:11px;color:#52525b;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:500}}
+.m-val{{font-size:28px;font-weight:600;color:#fafafa;letter-spacing:-0.5px}}
+.row2{{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}}
+.row1{{margin-bottom:20px}}
+.card{{background:#0e0e18;border:0.5px solid #1e1e2d;border-radius:12px;padding:24px}}
+.ct{{font-size:11px;color:#52525b;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:8px}}
+.leg{{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:18px}}
+.leg span{{display:flex;align-items:center;gap:6px;font-size:11px;color:#71717a}}
+.dot{{width:8px;height:8px;border-radius:2px;flex-shrink:0}}
+.cw{{position:relative;width:100%}}
+@media(max-width:700px){{.row2{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
+<div class="page">
 
 <div class="header">
-  <h1>📊 Рынок труда: Нефтянка & Финансы</h1>
-  <p>Данные: trudvsem.ru (Работа России) · {total} вакансий · Июнь 2026</p>
+  <h1>Рынок труда — Нефтянка & Финансы</h1>
+  <p>Источник: trudvsem.ru (Работа России) &nbsp;·&nbsp; {total} вакансий &nbsp;·&nbsp; Июнь 2026</p>
 </div>
 
-<div class="stats">
-  <div class="stat-card"><div class="num">{total}</div><div class="label">Вакансий собрано</div></div>
-  <div class="stat-card"><div class="num">{oil_count}</div><div class="label">Нефтегаз</div></div>
-  <div class="stat-card"><div class="num">{fin_count}</div><div class="label">Финансы</div></div>
-  <div class="stat-card"><div class="num">{oil_avg:,}</div><div class="label">Ср. зарплата нефтянка (руб.)</div></div>
-  <div class="stat-card"><div class="num">{fin_avg:,}</div><div class="label">Ср. зарплата финансы (руб.)</div></div>
+<div class="metrics">
+  <div class="m v1"><div class="m-label">Вакансий</div><div class="m-val">{total}</div></div>
+  <div class="m v2"><div class="m-label">Нефтегаз</div><div class="m-val">{oil_count}</div></div>
+  <div class="m v3"><div class="m-label">Финансы</div><div class="m-val">{fin_count}</div></div>
+  <div class="m v4"><div class="m-label">Ср. зарплата нефтянка</div><div class="m-val">{oil_avg:,} ₽</div></div>
+  <div class="m v5"><div class="m-label">Ср. зарплата финансы</div><div class="m-val">{fin_avg:,} ₽</div></div>
 </div>
 
-<div class="grid">
-
+<div class="row2">
   <div class="card">
-    <h2>Топ регионов по вакансиям</h2>
-    <canvas id="regionsChart"></canvas>
+    <div class="ct">Топ регионов по вакансиям</div>
+    <div class="leg"><span><span class="dot" style="background:#534AB7"></span>Количество вакансий</span></div>
+    <div class="cw" style="height:320px"><canvas id="c1" role="img" aria-label="Топ регионов">Москва 38</canvas></div>
   </div>
-
   <div class="card">
-    <h2>Средняя зарплата по регионам</h2>
-    <canvas id="salaryChart"></canvas>
+    <div class="ct">Средняя зарплата по регионам</div>
+    <div class="leg"><span><span class="dot" style="background:#1D9E75"></span>Руб. в месяц (min)</span></div>
+    <div class="cw" style="height:320px"><canvas id="c2" role="img" aria-label="Зарплата по регионам">Адыгея 249250</canvas></div>
   </div>
-
-  <div class="card full-width">
-    <h2>Топ навыков</h2>
-    <canvas id="skillsChart"></canvas>
-  </div>
-
-  <div class="card">
-    <h2>Нефтянка vs Финансы</h2>
-    <canvas id="compareChart"></canvas>
-  </div>
-
-  <div class="card">
-    <h2>Распределение по опыту</h2>
-    <canvas id="expChart"></canvas>
-  </div>
-
-  <div class="card full-width">
-    <h2>Топ компаний по количеству вакансий</h2>
-    <canvas id="companiesChart"></canvas>
-  </div>
-
 </div>
 
+<div class="row1">
+  <div class="card">
+    <div class="ct">Топ навыков</div>
+    <div class="leg"><span><span class="dot" style="background:#378ADD"></span>Упоминаний в вакансиях</span></div>
+    <div class="cw" style="height:260px"><canvas id="c3" role="img" aria-label="Топ навыков">1С 14</canvas></div>
+  </div>
+</div>
+
+<div class="row2">
+  <div class="card">
+    <div class="ct">Нефтянка vs финансы</div>
+    <div class="leg">
+      <span><span class="dot" style="background:#534AB7"></span>Нефтянка</span>
+      <span><span class="dot" style="background:#1D9E75"></span>Финансы</span>
+    </div>
+    <div class="cw" style="height:220px"><canvas id="c4" role="img" aria-label="Сравнение зарплат"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="ct">Распределение по опыту</div>
+    <div class="leg">
+      <span><span class="dot" style="background:#534AB7"></span>Без опыта</span>
+      <span><span class="dot" style="background:#1D9E75"></span>1 год</span>
+      <span><span class="dot" style="background:#378ADD"></span>3 года</span>
+      <span><span class="dot" style="background:#D85A30"></span>5+ лет</span>
+    </div>
+    <div class="cw" style="height:220px"><canvas id="c5" role="img" aria-label="По опыту"></canvas></div>
+  </div>
+</div>
+
+<div class="row1" style="margin-top:20px">
+  <div class="card">
+    <div class="ct">Топ компаний по количеству вакансий</div>
+    <div class="leg"><span><span class="dot" style="background:#D85A30"></span>Вакансий</span></div>
+    <div class="cw" style="height:240px"><canvas id="c6" role="img" aria-label="Топ компаний"></canvas></div>
+  </div>
+</div>
+
+</div>
 <script>
-const COLORS = ['#7c7cff','#5c9eff','#4ecdc4','#45b7d1','#96ceb4','#ffeaa7','#dda0dd','#98d8c8','#f7dc6f','#82e0aa'];
+const gc='rgba(255,255,255,0.04)',tc='#3f3f46';
+Chart.defaults.font.family="'Inter',sans-serif";
+Chart.defaults.font.size=11;
 
-Chart.defaults.color = '#888';
-Chart.defaults.borderColor = '#2a2a4a';
+new Chart(document.getElementById('c1'),{{type:'bar',data:{{labels:{json.dumps(regions_labels,ensure_ascii=False)},datasets:[{{data:{json.dumps(regions_values)},backgroundColor:['#534AB7','#5C52C4','#6460D1','#7270D8','#8080DF','#8E8EE5','#9C9CEB','#AAABF1','#B8B9F6','#C6C7FA'],borderRadius:4,borderSkipped:false}}]}},options:{{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.parsed.x+' вакансий'}}}}}},scales:{{x:{{grid:{{color:gc}},ticks:{{color:tc,font:{{size:11}}}}}},y:{{grid:{{display:false}},ticks:{{color:'#71717a',font:{{size:11}}}}}}}}}}}}); 
 
-new Chart(document.getElementById('regionsChart'), {{
-  type: 'bar',
-  data: {{
-    labels: {json.dumps(regions_labels, ensure_ascii=False)},
-    datasets: [{{ data: {json.dumps(regions_values)}, backgroundColor: COLORS, borderRadius: 6 }}]
-  }},
-  options: {{ indexAxis: 'y', plugins: {{ legend: {{ display: false }} }}, scales: {{ x: {{ grid: {{ color: '#2a2a4a' }} }}, y: {{ grid: {{ display: false }} }} }} }}
-}});
+new Chart(document.getElementById('c2'),{{type:'bar',data:{{labels:{json.dumps(salary_labels,ensure_ascii=False)},datasets:[{{data:{json.dumps(salary_values)},backgroundColor:['#0F6E56','#179168','#1D9E75','#29AE84','#38BD93','#4ECBA2','#63D9B0','#7BE5BF','#94EFCE','#ADF5DC'],borderRadius:4,borderSkipped:false}}]}},options:{{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.parsed.x.toLocaleString('ru')+' ₽'}}}}}},scales:{{x:{{grid:{{color:gc}},ticks:{{color:tc,font:{{size:11}},callback:v=>Math.round(v/1000)+'к'}}}},y:{{grid:{{display:false}},ticks:{{color:'#71717a',font:{{size:11}}}}}}}}}}}}); 
 
-new Chart(document.getElementById('salaryChart'), {{
-  type: 'bar',
-  data: {{
-    labels: {json.dumps(salary_labels, ensure_ascii=False)},
-    datasets: [{{ data: {json.dumps(salary_values)}, backgroundColor: '#5c9eff', borderRadius: 6 }}]
-  }},
-  options: {{ indexAxis: 'y', plugins: {{ legend: {{ display: false }} }}, scales: {{ x: {{ grid: {{ color: '#2a2a4a' }} }}, y: {{ grid: {{ display: false }} }} }} }}
-}});
+new Chart(document.getElementById('c3'),{{type:'bar',data:{{labels:{json.dumps(skills_labels,ensure_ascii=False)},datasets:[{{data:{json.dumps(skills_values)},backgroundColor:'#378ADD',borderRadius:4}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.parsed.y+' упоминаний'}}}}}},scales:{{x:{{grid:{{display:false}},ticks:{{color:'#71717a',font:{{size:10}},maxRotation:30,autoSkip:false}}}},y:{{grid:{{color:gc}},ticks:{{color:tc,font:{{size:11}}}}}}}}}}}}); 
 
-new Chart(document.getElementById('skillsChart'), {{
-  type: 'bar',
-  data: {{
-    labels: {json.dumps(skills_labels, ensure_ascii=False)},
-    datasets: [{{ data: {json.dumps(skills_values)}, backgroundColor: '#4ecdc4', borderRadius: 6 }}]
-  }},
-  options: {{ plugins: {{ legend: {{ display: false }} }}, scales: {{ y: {{ grid: {{ color: '#2a2a4a' }} }}, x: {{ grid: {{ display: false }} }} }} }}
-}});
+new Chart(document.getElementById('c4'),{{type:'bar',data:{{labels:['Нефтянка','Финансы'],datasets:[{{data:[{oil_avg},{fin_avg}],backgroundColor:['#534AB7','#1D9E75'],borderRadius:8,borderSkipped:false}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.parsed.y.toLocaleString('ru')+' ₽'}}}}}},scales:{{x:{{grid:{{display:false}},ticks:{{color:'#71717a',font:{{size:12,weight:'500'}}}}}},y:{{grid:{{color:gc}},ticks:{{color:tc,callback:v=>Math.round(v/1000)+'к'}}}}}}}}}}); 
 
-new Chart(document.getElementById('compareChart'), {{
-  type: 'bar',
-  data: {{
-    labels: ['Нефтянка', 'Финансы'],
-    datasets: [{{ data: [{oil_avg}, {fin_avg}], backgroundColor: ['#7c7cff', '#5c9eff'], borderRadius: 8 }}]
-  }},
-  options: {{ plugins: {{ legend: {{ display: false }} }}, scales: {{ y: {{ grid: {{ color: '#2a2a4a' }} }}, x: {{ grid: {{ display: false }} }} }} }}
-}});
+new Chart(document.getElementById('c5'),{{type:'doughnut',data:{{labels:{json.dumps(exp_labels,ensure_ascii=False)},datasets:[{{data:{json.dumps(exp_values)},backgroundColor:['#534AB7','#1D9E75','#378ADD','#D85A30','#BA7517','#993556','#888780'],borderWidth:3,borderColor:'#08080e',hoverOffset:6}}]}},options:{{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.label+': '+ctx.parsed+' вак.'}}}}}}}}}}); 
 
-new Chart(document.getElementById('expChart'), {{
-  type: 'doughnut',
-  data: {{
-    labels: {json.dumps(exp_labels, ensure_ascii=False)},
-    datasets: [{{ data: {json.dumps(exp_values)}, backgroundColor: COLORS, borderWidth: 0 }}]
-  }},
-  options: {{ plugins: {{ legend: {{ position: 'right' }} }} }}
-}});
-
-new Chart(document.getElementById('companiesChart'), {{
-  type: 'bar',
-  data: {{
-    labels: {json.dumps(companies_labels, ensure_ascii=False)},
-    datasets: [{{ data: {json.dumps(companies_values)}, backgroundColor: COLORS, borderRadius: 6 }}]
-  }},
-  options: {{ plugins: {{ legend: {{ display: false }} }}, scales: {{ y: {{ grid: {{ color: '#2a2a4a' }} }}, x: {{ grid: {{ display: false }} }} }} }}
-}});
+new Chart(document.getElementById('c6'),{{type:'bar',data:{{labels:{json.dumps(comp_labels,ensure_ascii=False)},datasets:[{{data:{json.dumps(comp_values)},backgroundColor:['#D85A30','#E06840','#E87650','#EF8460','#F59270','#FAA080','#FDAE90','#FFBCA0'],borderRadius:4,borderSkipped:false}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}},tooltip:{{backgroundColor:'#18181f',borderColor:'#2a2a38',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,callbacks:{{label:ctx=>' '+ctx.parsed.y+' вакансий'}}}}}},scales:{{x:{{grid:{{display:false}},ticks:{{color:'#71717a',font:{{size:10}},maxRotation:20}}}},y:{{grid:{{color:gc}},ticks:{{color:tc}}}}}}}}}}); 
 </script>
 </body>
 </html>"""
 
 with open(OUTPUT, "w", encoding="utf-8") as f:
-    f.write(html)
-
-print(f"✓ Дашборд сохранён: {OUTPUT}")
-print(f"  Открой в браузере: open {OUTPUT}")
+    f.write(HTML)
+print(f"Готово: {OUTPUT}")
