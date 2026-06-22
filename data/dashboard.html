@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Анализ рынка труда — Нефтянка & Финансы</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+  .header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 40px; text-align: center; border-bottom: 1px solid #2a2a4a; }
+  .header h1 { font-size: 28px; color: #fff; margin-bottom: 8px; }
+  .header p { color: #888; font-size: 14px; }
+  .stats { display: flex; gap: 20px; padding: 30px 40px; justify-content: center; flex-wrap: wrap; }
+  .stat-card { background: #1e1e2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px 32px; text-align: center; min-width: 160px; }
+  .stat-card .num { font-size: 32px; font-weight: 700; color: #7c7cff; }
+  .stat-card .label { font-size: 13px; color: #888; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 0 40px 40px; max-width: 1400px; margin: 0 auto; }
+  .card { background: #1e1e2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px; }
+  .card h2 { font-size: 15px; color: #aaa; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+  .full-width { grid-column: 1 / -1; }
+  canvas { max-height: 320px; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; padding: 0 16px 24px; } .stats { padding: 20px 16px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 Рынок труда: Нефтянка & Финансы</h1>
+  <p>Данные: trudvsem.ru (Работа России) · 526 вакансий · Июнь 2026</p>
+</div>
+
+<div class="stats">
+  <div class="stat-card"><div class="num">526</div><div class="label">Вакансий собрано</div></div>
+  <div class="stat-card"><div class="num">227</div><div class="label">Нефтегаз</div></div>
+  <div class="stat-card"><div class="num">299</div><div class="label">Финансы</div></div>
+  <div class="stat-card"><div class="num">80,426</div><div class="label">Ср. зарплата нефтянка (руб.)</div></div>
+  <div class="stat-card"><div class="num">64,065</div><div class="label">Ср. зарплата финансы (руб.)</div></div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Топ регионов по вакансиям</h2>
+    <canvas id="regionsChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Средняя зарплата по регионам</h2>
+    <canvas id="salaryChart"></canvas>
+  </div>
+
+  <div class="card full-width">
+    <h2>Топ навыков</h2>
+    <canvas id="skillsChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Нефтянка vs Финансы</h2>
+    <canvas id="compareChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Распределение по опыту</h2>
+    <canvas id="expChart"></canvas>
+  </div>
+
+  <div class="card full-width">
+    <h2>Топ компаний по количеству вакансий</h2>
+    <canvas id="companiesChart"></canvas>
+  </div>
+
+</div>
+
+<script>
+const COLORS = ['#7c7cff','#5c9eff','#4ecdc4','#45b7d1','#96ceb4','#ffeaa7','#dda0dd','#98d8c8','#f7dc6f','#82e0aa'];
+
+Chart.defaults.color = '#888';
+Chart.defaults.borderColor = '#2a2a4a';
+
+new Chart(document.getElementById('regionsChart'), {
+  type: 'bar',
+  data: {
+    labels: ["Город Москва", "Самарская область", "Ханты-Мансийский автономный округ - Югра", "Хабаровский край", "Удмуртская Республика", "Республика Башкортостан", "Краснодарский край", "Красноярский край", "Республика Татарстан (Татарстан)", "Тульская область"],
+    datasets: [{ data: [38, 31, 24, 22, 21, 18, 18, 16, 15, 15], backgroundColor: COLORS, borderRadius: 6 }]
+  },
+  options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#2a2a4a' } }, y: { grid: { display: false } } } }
+});
+
+new Chart(document.getElementById('salaryChart'), {
+  type: 'bar',
+  data: {
+    labels: ["Республика Адыгея (Адыгея)", "Красноярский край", "Город Москва", "Мурманская область", "Камчатский край", "Город Санкт-Петербург", "Томская область", "Чукотский автономный округ", "Ненецкий автономный округ", "Хабаровский край"],
+    datasets: [{ data: [249250, 143599, 129641, 116156, 115078, 108480, 101997, 98245, 96137, 94075], backgroundColor: '#5c9eff', borderRadius: 6 }]
+  },
+  options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#2a2a4a' } }, y: { grid: { display: false } } } }
+});
+
+new Chart(document.getElementById('skillsChart'), {
+  type: 'bar',
+  data: {
+    labels: ["Подготовка", "формирование", "Работать с программой 1С", "Экономический анализ", "Выполнение работ по экономической деятельности", "Знание офисных программ", "Планирование и расчёт необходимых ресурсов", "составление", "Учет экономических/финансовых показателей", "Расчет экономических/финансовых/числовых показателей", "Ведение бухгалтерского учета", "Умение делать расчеты", "Ведение учета/отражение финансово-хозяйственных операций", "Анализ деятельности", "Составление налоговой отчетности"],
+    datasets: [{ data: [17, 15, 14, 11, 11, 11, 10, 9, 9, 9, 9, 9, 9, 8, 8], backgroundColor: '#4ecdc4', borderRadius: 6 }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2a2a4a' } }, x: { grid: { display: false } } } }
+});
+
+new Chart(document.getElementById('compareChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Нефтянка', 'Финансы'],
+    datasets: [{ data: [80426, 64065], backgroundColor: ['#7c7cff', '#5c9eff'], borderRadius: 8 }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2a2a4a' } }, x: { grid: { display: false } } } }
+});
+
+new Chart(document.getElementById('expChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ["Без опыта", "1 лет", "2 лет", "3 лет", "4 лет", "5 лет", "6 лет", "8 лет", "20 лет"],
+    datasets: [{ data: [164, 181, 10, 120, 3, 32, 10, 3, 1], backgroundColor: COLORS, borderWidth: 0 }]
+  },
+  options: { plugins: { legend: { position: 'right' } } }
+});
+
+new Chart(document.getElementById('companiesChart'), {
+  type: 'bar',
+  data: {
+    labels: ["Компания БКС", "ПАО \"УДМУРТНЕФТЬ\" ИМ. В.И. КУДИНОВА", "Сбербанк России, ПАО", "ООО \"ЛУКОЙЛ-ПЕРМЬ\"", "ООО \"РН-КРАСНОДАРНЕФТЕГАЗ\"", "ГКУ ТО \"ЦБМОТО\"", "Саратовский филиал ПАО НК \"РуссНефть\"", "ООО \"РН-ВАНКОР\"", "ПАО \"СУРГУТНЕФТЕГАЗ\"", "АО \"ННК-ХАБАРОВСКИЙ НПЗ\""],
+    datasets: [{ data: [21, 17, 11, 9, 8, 8, 7, 6, 6, 6], backgroundColor: COLORS, borderRadius: 6 }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2a2a4a' } }, x: { grid: { display: false } } } }
+});
+</script>
+</body>
+</html>
